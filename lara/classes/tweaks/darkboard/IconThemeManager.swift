@@ -122,8 +122,11 @@ struct LaraThemedApp: Identifiable, Hashable {
         }
     }
 
-    func setPNGIcons(icon: LaraThemedIcon) throws {
+    @discardableResult
+    func setPNGIcons(icon: LaraThemedIcon) throws -> Int {
         let fm = FileManager.default
+        var changedIconCount = 0
+
         for iconName in pngIconPaths {
             let iconURL = bundleURL.appendingPathComponent(iconName)
             guard fm.fileExists(atPath: iconURL.path) else { continue }
@@ -183,7 +186,17 @@ struct LaraThemedApp: Identifiable, Hashable {
             if(!chown2) {
                 throw NSError(domain: "IconThemer", code: 6, userInfo: [NSLocalizedDescriptionKey: "\(bundleIdentifier): 2nd chown failed"])
             }
+
+            changedIconCount += 1
         }
+
+        guard changedIconCount > 0 else {
+            throw NSError(domain: "IconThemer", code: 14, userInfo: [
+                NSLocalizedDescriptionKey: "\(name) (\(bundleIdentifier)): no standalone PNG icon files were found at the expected paths. This app may store its icon in Assets.car or another asset catalog, which this file-overwrite method cannot currently theme."
+            ])
+        }
+
+        return changedIconCount
     }
 }
 
@@ -604,10 +617,9 @@ final class IconThemeManager: ObservableObject {
 
                 do {
                     if let icon = change.icon {
-                        themedCount += 1
                         try change.app.backUpPNGIcons()
                         try? fm.createDirectory(at: processedThemesDir.appendingPathComponent(icon.themeName), withIntermediateDirectories: true, attributes: nil)
-                        try change.app.setPNGIcons(icon: icon)
+                        themedCount += try change.app.setPNGIcons(icon: icon)
                     } else {
                         try change.app.restorePNGIcons()
                     }
