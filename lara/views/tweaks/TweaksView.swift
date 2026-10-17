@@ -63,9 +63,9 @@ struct TweaksView: View {
                     NavigationLink("Screen Time", destination: ScreenTimeView(mgr: mgr))
                 }
                 
-                Section(header: HeaderLabel(text: "Broken", icon: "exclamationmark.triangle.fill")) {
+                Section(header: HeaderLabel(text: "User Interface", icon: "eye")) {
                     NavigationLink("DarkBoard", destination: DarkBoardView())
-                        .disabled(true)
+                        .disabled(!mgr.sbxready)
                 }
                 
                 NavigationLink("Extra Tools", destination: ToolsView())
