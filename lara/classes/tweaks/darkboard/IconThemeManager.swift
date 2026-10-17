@@ -441,7 +441,10 @@ final class IconThemeManager: ObservableObject {
 
                 // Raw assets may have changed during a reimport. Drop processed
                 // copies so the next apply regenerates them from the new PNGs.
-                try fm.removeItem(at: processedThemesDir.appendingPathComponent(finalThemeName, isDirectory: true))
+                let processedThemeURL = processedThemesDir.appendingPathComponent(finalThemeName, isDirectory: true)
+                if fm.fileExists(atPath: processedThemeURL.path) {
+                    try fm.removeItem(at: processedThemeURL)
+                }
                 refreshThemes()
                 return
             } else {
@@ -474,7 +477,10 @@ final class IconThemeManager: ObservableObject {
 
         // Raw assets may have changed during a reimport. Drop processed
         // copies so the next apply regenerates them from the new PNGs.
-        try fm.removeItem(at: processedThemesDir.appendingPathComponent(finalThemeName, isDirectory: true))
+        let processedThemeURL = processedThemesDir.appendingPathComponent(finalThemeName, isDirectory: true)
+        if fm.fileExists(atPath: processedThemeURL.path) {
+            try fm.removeItem(at: processedThemeURL)
+        }
         refreshThemes()
     }
 
