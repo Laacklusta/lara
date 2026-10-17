@@ -635,6 +635,10 @@ final class IconThemeManager: ObservableObject {
         }
         clearIconCache()
 
+        if themedCount == 0 {
+            errors.append("No icon files were changed. The selected theme did not produce any supported standalone PNG replacements. Apps using Assets.car or other asset catalogs need a different theming method.")
+        }
+
         UserDefaults.standard.set(themedCount > 0, forKey: pendingFixupKey)
         return errors
     }
