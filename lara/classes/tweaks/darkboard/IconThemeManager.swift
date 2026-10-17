@@ -82,8 +82,10 @@ struct LaraThemedApp: Identifiable, Hashable {
         return nil
     }
 
-    func backUpPNGIcons() {
+    func backUpPNGIcons() throws {
         let fm = FileManager.default
+        try fm.createDirectory(at: originalIconsDir, withIntermediateDirectories: true, attributes: nil)
+
         for pngIconPath in pngIconPaths {
             let legacyURL = originalIconsDir.appendingPathComponent(bundleIdentifier + "----" + pngIconPath)
             let newURL = backupIconURL(fileName: pngIconPath)
@@ -93,9 +95,16 @@ struct LaraThemedApp: Identifiable, Hashable {
             if fm.fileExists(atPath: newURL.path) {
                 continue
             } else if fm.fileExists(atPath: legacyURL.path) {
-                try? fm.moveItem(at: legacyURL, to: newURL)
+                try fm.moveItem(at: legacyURL, to: newURL)
             } else {
-                try? fm.copyItem(at: sourceURL, to: newURL)
+                try fm.copyItem(at: sourceURL, to: newURL)
+            }
+
+            guard fm.fileExists(atPath: newURL.path),
+                  (try? Data(contentsOf: newURL)) != nil else {
+                throw NSError(domain: "IconThemer", code: 11, userInfo: [
+                    NSLocalizedDescriptionKey: "Could not safely back up \(bundleIdentifier)/\(pngIconPath); no icon was overwritten."
+                ])
             }
         }
     }
@@ -430,6 +439,9 @@ final class IconThemeManager: ObservableObject {
                     throw NSError(domain: "IconThemer", code: 9, userInfo: [NSLocalizedDescriptionKey: "No icons were found in the imported theme. Expected `<bundle-id>.png` in a folder."])
                 }
 
+                // Raw assets may have changed during a reimport. Drop processed
+                // copies so the next apply regenerates them from the new PNGs.
+                try fm.removeItem(at: processedThemesDir.appendingPathComponent(finalThemeName, isDirectory: true))
                 refreshThemes()
                 return
             } else {
@@ -460,6 +472,9 @@ final class IconThemeManager: ObservableObject {
             throw NSError(domain: "IconThemer", code: 9, userInfo: [NSLocalizedDescriptionKey: "No icons were found in the imported theme. Expected `<bundle-id>.png` in a folder."])
         }
 
+        // Raw assets may have changed during a reimport. Drop processed
+        // copies so the next apply regenerates them from the new PNGs.
+        try fm.removeItem(at: processedThemesDir.appendingPathComponent(finalThemeName, isDirectory: true))
         refreshThemes()
     }
 
@@ -532,7 +547,7 @@ final class IconThemeManager: ObservableObject {
                 do {
                     if let icon = change.icon {
                         themedCount += 1
-                        change.app.backUpPNGIcons()
+                        try change.app.backUpPNGIcons()
                         try? fm.createDirectory(at: processedThemesDir.appendingPathComponent(icon.themeName), withIntermediateDirectories: true, attributes: nil)
                         try change.app.setPNGIcons(icon: icon)
                     } else {
