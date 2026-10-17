@@ -147,7 +147,7 @@ struct DarkBoardView: View {
             .clipShape(RoundedRectangle(cornerRadius: 16))
 
             if manager.themes.isEmpty {
-                Text("Import a folder, `.theme`, or `.zip` containing `IconBundles/<bundle-id>.png` icons.")
+                Text("Import a folder, `.theme`, `.zip`, or jailbreak `.deb` package containing icon PNGs.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
                     .padding()
@@ -436,6 +436,9 @@ private struct ThemeImportPicker: UIViewControllerRepresentable {
     func makeUIViewController(context: Context) -> UIDocumentPickerViewController {
         var documentTypes = [UTType.folder.identifier]
         documentTypes.append(UTType.zip.identifier)
+        if let debType = UTType(filenameExtension: "deb") {
+            documentTypes.append(debType.identifier)
+        }
         if let themeType = UTType(filenameExtension: "theme")?.identifier {
             documentTypes.append(themeType)
         }
