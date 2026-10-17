@@ -2,6 +2,7 @@ import Combine
 import Foundation
 import SwiftUI
 import UIKit
+import Darwin
 
 private let iconThemeStorageRoot = URL(fileURLWithPath: "/var/mobile/.DO-NOT-DELETE-lara/IconThemes", isDirectory: true)
 private let rawThemesDir = iconThemeStorageRoot.appendingPathComponent("RawThemes", isDirectory: true)
@@ -388,6 +389,53 @@ final class IconThemeManager: ObservableObject {
         }
     }
 
+    private func extractDebianPackage(at packageURL: URL, to destinationURL: URL) throws {
+        // Extract only the payload; dpkg-deb does not install the package or run scripts.
+        let candidates = [
+            "/var/jb/usr/bin/dpkg-deb",
+            "/usr/bin/dpkg-deb",
+            "/var/jb/bin/dpkg-deb",
+            "/bin/dpkg-deb"
+        ]
+        guard let executable = candidates.first(where: { fm.isExecutableFile(atPath: $0) }) else {
+            throw NSError(domain: "IconThemer", code: 12, userInfo: [
+                NSLocalizedDescriptionKey: "Cannot import .deb packages because dpkg-deb was not found. Install a jailbreak bootstrap that provides dpkg-deb, or import the theme as a .zip."
+            ])
+        }
+
+        var arguments: [UnsafeMutablePointer<CChar>?] = [
+            strdup(executable),
+            strdup("-x"),
+            strdup(packageURL.path),
+            strdup(destinationURL.path),
+            nil
+        ]
+        defer {
+            for pointer in arguments where pointer != nil {
+                free(pointer)
+            }
+        }
+
+        var processID: pid_t = 0
+        let spawnResult = executable.withCString { executablePath in
+            arguments.withUnsafeMutableBufferPointer { buffer in
+                posix_spawn(&processID, executablePath, nil, nil, buffer.baseAddress!, environ)
+            }
+        }
+        guard spawnResult == 0 else {
+            throw NSError(domain: "IconThemer", code: Int(spawnResult), userInfo: [
+                NSLocalizedDescriptionKey: "Could not start dpkg-deb to extract this package (error \(spawnResult))."
+            ])
+        }
+
+        var processStatus: Int32 = 0
+        guard waitpid(processID, &processStatus, 0) == processID, processStatus == 0 else {
+            throw NSError(domain: "IconThemer", code: 13, userInfo: [
+                NSLocalizedDescriptionKey: "dpkg-deb could not extract this package. It may be corrupt or use an unsupported package format."
+            ])
+        }
+    }
+
     func importTheme(from importURL: URL) throws {
         try importTheme(from: importURL, preferredName: nil)
     }
@@ -404,7 +452,7 @@ final class IconThemeManager: ObservableObject {
             sourceDirectory = try resolveThemeSourceDirectory(from: workingURL)
         } else {
             let ext = workingURL.pathExtension.lowercased()
-            if ext == "theme" || ext == "zip" {
+            if ext == "theme" || ext == "zip" || ext == "deb" {
                 let tempDir = fm.temporaryDirectory.appendingPathComponent("theme_import_\(UUID().uuidString)", isDirectory: true)
                 try fm.createDirectory(at: tempDir, withIntermediateDirectories: true, attributes: nil)
                 defer { try? fm.removeItem(at: tempDir) }
@@ -412,9 +460,13 @@ final class IconThemeManager: ObservableObject {
                 let extractDir = tempDir.appendingPathComponent("Extracted", isDirectory: true)
                 try fm.createDirectory(at: extractDir, withIntermediateDirectories: true, attributes: nil)
                 
-                let archivePath = tempDir.appendingPathComponent("import.\(ext == "zip" ? "zip" : "theme")")
-                try Data(contentsOf: workingURL).write(to: archivePath)
-                try unzipFile(at: archivePath, to: extractDir)
+                if ext == "deb" {
+                    try extractDebianPackage(at: workingURL, to: extractDir)
+                } else {
+                    let archivePath = tempDir.appendingPathComponent("import.\(ext == "zip" ? "zip" : "theme")")
+                    try Data(contentsOf: workingURL).write(to: archivePath)
+                    try unzipFile(at: archivePath, to: extractDir)
+                }
                 let resolvedSource = try resolveThemeSourceDirectory(from: extractDir)
                 let themeURL = rawThemesDir.appendingPathComponent(finalThemeName, isDirectory: true)
                 try? fm.removeItem(at: themeURL)
