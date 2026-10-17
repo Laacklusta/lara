@@ -569,7 +569,15 @@ final class IconThemeManager: ObservableObject {
 
         let preferredIcons = preferredIcons
         return installedApps
-            .filter { !$0.hiddenFromSpringboard && !$0.pngIconPaths.isEmpty }
+            // Only process apps that have at least one real icon PNG at a path
+            // declared by their Info.plist. Some apps declare icon names that
+            // resolve to asset catalogs or files that are not present on disk.
+            .filter { app in
+                guard !app.hiddenFromSpringboard else { return false }
+                return app.pngIconPaths.contains { path in
+                    fm.fileExists(atPath: app.bundleURL.appendingPathComponent(path).path)
+                }
+            }
             .map { app in
                 if let themedIcon = preferredIcons[app.bundleIdentifier] {
                     return LaraAppIconChange(app: app, icon: themedIcon)
